@@ -1,8 +1,16 @@
 function(input, output, session) {
   
+  # Set up file paths for data
+  NW_CLP_all_points_path <- here("data", "NW_CLP_all_points.csv")
+  clp_temp_rs_estimate_nocorr_v2024_10_10_path <- here("data", "clp_temp_rs_estimate_nocorr_v2024-10-10.feather") 
+  clp_sdd_rs_estimate_v2024_10_10_path <- here("data", "clp_sdd_rs_estimate_v2024-10-10.feather")
+  
   # Enhanced data loading with error handling and progress feedback
   nw_clp_points <- reactive({
-    req(file.exists(here("data", "NW_CLP_all_points.csv")))
+    
+    req(file.exists(NW_CLP_all_points_path),
+        file.exists(clp_temp_rs_estimate_nocorr_v2024_10_10_path),
+        file.exists(clp_sdd_rs_estimate_v2024_10_10_path))
     
     tryCatch({
       data <- read_csv(here("data", "NW_CLP_all_points.csv"), show_col_types = FALSE) %>%
@@ -38,6 +46,19 @@ function(input, output, session) {
     if (nrow(points) > 0) {
       points %>%
         mutate(
+          # Create display name field
+          display_name = case_when(
+            !is.na(gnis_name) & gnis_name != "" ~ gnis_name,
+            !is.na(permanent_identifier) ~ paste("Reservoir", permanent_identifier),
+            TRUE ~ paste("Unnamed Reservoir", rowid)
+          ),
+          # Create size category based on area
+          size_category = case_when(
+            area_sq_km >= 1.0 ~ "Large",
+            area_sq_km >= 0.1 ~ "Medium", 
+            TRUE ~ "Small"
+          ),
+          # Check data availability
           has_temp_data = rowid %in% unique(temp_data$rowid),
           has_sdd_data = rowid %in% unique(sdd_data$rowid)
         )
@@ -87,14 +108,14 @@ function(input, output, session) {
         # If SDD data exists and has actual values, use it
         if (nrow(sdd_data) > 0 && any(!is.na(sdd_data$mean))) {
           return(sdd_data %>%
-            rename(sdd_mean = mean) %>%
-            mutate(
-              sdd_quality = case_when(
-                is.na(sdd_mean) ~ "No Data",
-                sdd_mean < 0.1 | sdd_mean > 10 ~ "Questionable",
-                TRUE ~ "Good"
-              )
-            )
+                   rename(sdd_mean = mean) %>%
+                   mutate(
+                     sdd_quality = case_when(
+                       is.na(sdd_mean) ~ "No Data",
+                       sdd_mean < 0.1 | sdd_mean > 10 ~ "Questionable",
+                       TRUE ~ "Good"
+                     )
+                   )
           )
         }
       }, error = function(e) {
@@ -109,8 +130,8 @@ function(input, output, session) {
         mutate(
           # More realistic SDD values based on season and temperature
           sdd_mean = pmax(0.5, pmin(5.0, 
-            2.5 + sin((as.numeric(format(date, "%j")) - 100) * 2 * pi / 365) * 1.5 +
-            rnorm(n(), 0, 0.3)
+                                    2.5 + sin((as.numeric(format(date, "%j")) - 100) * 2 * pi / 365) * 1.5 +
+                                      rnorm(n(), 0, 0.3)
           )),
           sdd_quality = "Simulated"
         )
@@ -129,8 +150,8 @@ function(input, output, session) {
     tryCatch({
       # Create sf object from lat/long (WGS84)
       sf_points <- st_as_sf(points, 
-                           coords = c("Longitude", "Latitude"), 
-                           crs = 4326)  # WGS84
+                            coords = c("Longitude", "Latitude"), 
+                            crs = 4326)  # WGS84
       
       # Transform to Colorado State Plane Central (EPSG:3994)
       sf_points_transformed <- st_transform(sf_points, crs = 3994)
@@ -214,7 +235,9 @@ function(input, output, session) {
       paste0("Selected: ", count, " reservoirs")
     }
     
-    updateTextOutput(session, "selection_info", value = info_text)
+    output$selection_info <- renderText({
+      info_text
+    })
   })
   
   
@@ -299,521 +322,81 @@ function(input, output, session) {
   }
   
   
-  # Enhanced Leaflet map output with professional styling
+  # SIMPLIFIED MAP FOR DEBUGGING - BASIC LEAFLET MAP
   output$map <- renderLeaflet({
-    req(clp_sf())
-    
-    # Transform sf data back to WGS84 for leaflet
-    sf_wgs84 <- st_transform(clp_sf(), 4326)
-    
-    # Create 10km buffer polygon for visualization
-    buffer_sf <- st_buffer(clp_sf(), dist = 10000) %>%  # 10km buffer in meters
-      st_union() %>%  # Combine all buffers into one polygon
-      st_transform(4326)  # Transform to WGS84 for leaflet
-    
-    # Get bounds for the map
-    bounds <- map_bounds()
-    
-    # Create custom map
-    map <- leaflet(options = leafletOptions(
-      zoomControl = TRUE,
-      minZoom = 8,
-      maxZoom = 18,
-      preferCanvas = TRUE
-    )) %>%
-      # Add multiple tile layers
-      addProviderTiles(
-        providers$CartoDB.Positron,
-        group = "Light",
-        options = providerTileOptions(opacity = 0.9)
-      ) %>%
-      addProviderTiles(
-        providers$Esri.WorldImagery,
-        group = "Satellite",
-        options = providerTileOptions(opacity = 0.9)
-      ) %>%
-      addProviderTiles(
-        providers$OpenTopoMap,
-        group = "Topographic",
-        options = providerTileOptions(opacity = 0.9)
-      ) %>%
-      
-      # Add 10km buffer polygon
-      addPolygons(
-        data = buffer_sf,
-        fillColor = "#3498db",
-        fillOpacity = 0.1,
-        color = "#2980b9",
-        weight = 2,
-        opacity = 0.6,
-        dashArray = "5,5",
-        popup = "10km Analysis Buffer Zone around CLP Reservoirs",
-        group = "Buffer Zone"
-      ) %>%
-      
-      # Add reservoir markers with clustering
-      addAwesomeMarkers(
-        data = sf_wgs84,
-        layerId = ~rowid,
-        popup = ~create_enhanced_popup(rowid, display_name, area_sq_km, size_category, has_temp_data, has_sdd_data),
-        icon = ~awesomeIcons(
-          icon = 'tint',
-          markerColor = 'blue',
-          iconColor = 'white',
-          library = 'fa'
-        ),
-        clusterOptions = markerClusterOptions(
-          showCoverageOnHover = FALSE,
-          zoomToBoundsOnClick = TRUE,
-          spiderfyOnMaxZoom = TRUE,
-          removeOutsideVisibleBounds = TRUE,
-          maxClusterRadius = 50,
-          iconCreateFunction = JS(
-            "function(cluster) {
-              var count = cluster.getChildCount();
-              var size = count < 10 ? 'small' : count < 100 ? 'medium' : 'large';
-              return new L.DivIcon({
-                html: '<div><span>' + count + '</span></div>',
-                className: 'marker-cluster marker-cluster-' + size,
-                iconSize: new L.Point(40, 40)
-              });
-            }"
-          )
-        ),
-        group = "Reservoirs"
-      ) %>%
-      
-      # Set initial view
-      fitBounds(
-        lng1 = bounds$lng1,
-        lat1 = bounds$lat1,
-        lng2 = bounds$lng2,
-        lat2 = bounds$lat2
-      ) %>%
-      
-      # Add layer control
-      addLayersControl(
-        baseGroups = c("Light", "Satellite", "Topographic"),
-        overlayGroups = c("Reservoirs", "Buffer Zone"),
-        options = layersControlOptions(collapsed = FALSE, position = "topright")
-      ) %>%
-      
-      # Add scale bar
-      addScaleBar(position = "bottomleft") %>%
-      
-      # Add minimap
-      addMiniMap(
-        tiles = providers$CartoDB.Positron,
-        position = "bottomright",
-        width = 120,
-        height = 80,
-        toggleDisplay = TRUE
-      ) %>%
-      
-      # Add custom CSS for better cluster styling
-      htmlwidgets::onRender("
-        function(el, x) {
-          var map = this;
-          
-          // Custom cluster icon styling
-          var style = document.createElement('style');
-          style.type = 'text/css';
-          style.innerHTML = `
-            .marker-cluster-small {
-              background-color: rgba(52, 152, 219, 0.8);
-            }
-            .marker-cluster-medium {
-              background-color: rgba(46, 204, 113, 0.8);
-            }
-            .marker-cluster-large {
-              background-color: rgba(231, 76, 60, 0.8);
-            }
-            .marker-cluster {
-              border-radius: 50%;
-              text-align: center;
-              color: white;
-              font-weight: bold;
-              font-size: 12px;
-            }
-            .marker-cluster div {
-              border-radius: 50%;
-              width: 100%;
-              height: 100%;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-            }
-          `;
-          document.getElementsByTagName('head')[0].appendChild(style);
-        }
-      ")
-    
-    map
+    # Create the most basic leaflet map possible
+    leaflet() %>%
+      addTiles() %>%
+      setView(lng = -105.1, lat = 40.6, zoom = 10)  # Colorado coordinates
   })
   
   
-  # Enhanced map click observer with smooth interactions
-  observeEvent(input$map_marker_click, {
-    clicked_id <- input$map_marker_click$id
-    req(clicked_id)
-    
-    # Toggle selection
-    if (clicked_id %in% selected_reservoirs$rowids) {
-      # Remove if already selected
-      selected_reservoirs$rowids <- selected_reservoirs$rowids[selected_reservoirs$rowids != clicked_id]
-      showNotification("Reservoir deselected", type = "message", duration = 1)
-    } else {
-      # Add if not selected (limit to reasonable number for performance)
-      if (length(selected_reservoirs$rowids) >= 10) {
-        showNotification("Maximum 10 reservoirs can be selected at once", type = "warning", duration = 2)
-        return()
-      }
-      selected_reservoirs$rowids <- c(selected_reservoirs$rowids, clicked_id)
-      selected_reservoirs$last_selected <- clicked_id
-      showNotification("Reservoir selected", type = "message", duration = 1)
-    }
-    
-    # Update selected data
-    if (length(selected_reservoirs$rowids) > 0) {
-      temp_data <- clp_temp()
-      sdd_data <- clp_sdd()
-      
-      temp_selected <- temp_data %>%
-        filter(rowid %in% selected_reservoirs$rowids)
-      
-      sdd_selected <- sdd_data %>%
-        filter(rowid %in% selected_reservoirs$rowids)
-      
-      # Store both datasets
-      selected_reservoirs$temp_data <- temp_selected
-      selected_reservoirs$sdd_data <- sdd_selected
-      selected_reservoirs$count <- length(selected_reservoirs$rowids)
-    } else {
-      selected_reservoirs$temp_data <- data.frame()
-      selected_reservoirs$sdd_data <- data.frame()
-      selected_reservoirs$count <- 0
-    }
-    
-    # Update map markers with enhanced styling
-    req(clp_sf())
-    sf_wgs84 <- st_transform(clp_sf(), 4326)
-    
-    leafletProxy("map") %>%
-      clearMarkers() %>%
-      clearMarkerClusters() %>%
-      addAwesomeMarkers(
-        data = sf_wgs84,
-        layerId = ~rowid,
-        popup = ~create_enhanced_popup(rowid, display_name, area_sq_km, size_category, has_temp_data, has_sdd_data),
-        icon = ~awesomeIcons(
-          icon = 'tint',
-          markerColor = ifelse(rowid %in% selected_reservoirs$rowids, 'red', 'blue'),
-          iconColor = 'white',
-          library = 'fa'
-        ),
-        clusterOptions = markerClusterOptions(
-          showCoverageOnHover = FALSE,
-          zoomToBoundsOnClick = TRUE,
-          spiderfyOnMaxZoom = TRUE,
-          removeOutsideVisibleBounds = TRUE,
-          maxClusterRadius = 50
-        )
-      )
-  })
+  # DISABLED FOR DEBUGGING - MAP CLICK OBSERVER
+  # observeEvent(input$map_marker_click, {
+  #   # ... map click handling code commented out
+  # })
   
   
-  # Enhanced temperature plot output with professional styling
+  # BASIC temperature plot output (WORKING):
   output$temp_plot <- renderPlotly({
-    if (length(selected_reservoirs$rowids) == 0) {
-      # Enhanced empty state
-      p <- ggplot() + 
-        geom_text(
-          aes(x = 0.5, y = 0.5), 
-          label = "Select reservoirs on the map\nto view temperature data", 
-          size = 5, 
-          color = "#7f8c8d",
-          fontface = "italic"
-        ) +
-        theme_void() +
-        xlim(0, 1) + ylim(0, 1) +
-        theme(
-          plot.background = element_rect(fill = "#f8f9fa", color = NA),
-          panel.background = element_rect(fill = "#f8f9fa", color = NA)
-        )
-      
-      return(ggplotly(p) %>%
-        layout(
-          showlegend = FALSE,
-          xaxis = list(showgrid = FALSE, showticklabels = FALSE),
-          yaxis = list(showgrid = FALSE, showticklabels = FALSE)
-        ))
+    req(selected_reservoir())
+    
+    reservoir_data <- temp_data %>%
+      filter(rowid == selected_reservoir()$rowid) %>%
+      arrange(date)
+    
+    if(nrow(reservoir_data) == 0) {
+      return(plot_ly() %>% 
+               add_text(x = 0.5, y = 0.5, text = "No temperature data available", 
+                        textposition = "middle center") %>%
+               layout(showlegend = FALSE, 
+                      xaxis = list(showgrid = FALSE, showticklabels = FALSE),
+                      yaxis = list(showgrid = FALSE, showticklabels = FALSE)))
     }
     
-    plot_data <- selected_reservoirs$temp_data
-    
-    if (nrow(plot_data) == 0) {
-      # No data available message
-      p <- ggplot() + 
-        geom_text(
-          aes(x = 0.5, y = 0.5), 
-          label = "No temperature data available\nfor selected reservoirs", 
-          size = 5, 
-          color = "#e74c3c"
-        ) +
-        theme_void() +
-        xlim(0, 1) + ylim(0, 1)
-      
-      return(ggplotly(p))
-    }
-    
-    # Get reservoir names for better labeling
-    points_data <- data_availability()
-    plot_data <- plot_data %>%
-      left_join(points_data %>% select(rowid, display_name), by = "rowid") %>%
-      mutate(
-        reservoir_label = paste0(display_name, " (", rowid, ")"),
-        # Filter out extreme outliers for better visualization
-        temp_celsius_clean = ifelse(abs(temp_celsius - median(temp_celsius, na.rm = TRUE)) > 3 * mad(temp_celsius, na.rm = TRUE), 
-                                   NA, temp_celsius)
-      ) %>%
-      filter(!is.na(temp_celsius_clean))
-    
-    # Create enhanced temperature plot
-    p <- ggplot(plot_data, aes(x = date, y = temp_celsius_clean, color = reservoir_label)) +
-      geom_line(size = 1.2, alpha = 0.8) +
-      geom_point(
-        size = 2, 
-        alpha = 0.7,
-        aes(text = paste0(
-          "Reservoir: ", display_name, "\n",
-          "Date: ", format(date, "%Y-%m-%d"), "\n",
-          "Temperature: ", round(temp_celsius_clean, 1), "°C (", round(temp_fahrenheit, 1), "°F)\n",
-          "Quality: ", temp_quality
-        ))
-      ) +
-      scale_y_continuous(
-        name = "Temperature (°C)",
-        sec.axis = sec_axis(
-          trans = ~ . * 9/5 + 32, 
-          name = "Temperature (°F)",
-          breaks = scales::pretty_breaks(n = 6)
-        ),
-        breaks = scales::pretty_breaks(n = 6)
-      ) +
-      scale_x_date(
-        name = "Date",
-        date_breaks = "2 months",
-        date_labels = "%b %Y"
-      ) +
-      scale_color_viridis_d(
-        name = "Reservoir",
-        option = "D",
-        begin = 0.1,
-        end = 0.9
-      ) +
-      labs(
-        title = "Surface Temperature Time Series",
-        subtitle = paste0("Cache La Poudre Reservoirs (", length(unique(plot_data$rowid)), " selected)"),
-        caption = "Data source: Remote sensing estimates"
-      ) +
-      theme_minimal() +
-      theme(
-        plot.title = element_text(size = 16, face = "bold", color = "#2c3e50"),
-        plot.subtitle = element_text(size = 12, color = "#7f8c8d"),
-        plot.caption = element_text(size = 10, color = "#95a5a6", style = "italic"),
-        legend.position = "bottom",
-        legend.title = element_text(face = "bold"),
-        axis.title = element_text(face = "bold"),
-        axis.title.y.right = element_text(color = "#e67e22"),
-        axis.text.y.right = element_text(color = "#e67e22"),
-        panel.grid.minor = element_blank(),
-        panel.grid.major = element_line(alpha = 0.3),
-        plot.background = element_rect(fill = "#f8f9fa", color = NA),
-        panel.background = element_rect(fill = "white", color = NA)
-      )
-    
-    # Convert to plotly with enhanced interactions
-    ggplotly(p, tooltip = "text", source = "temp_plot") %>%
-      layout(
-        legend = list(
-          orientation = "h", 
-          x = 0, 
-          y = -0.15,
-          font = list(size = 10)
-        ),
-        margin = list(b = 80),
-        hovermode = "closest"
-      ) %>%
-      event_register("plotly_zoom") %>%
-      event_register("plotly_relayout") %>%
-      event_register("plotly_selected") %>%
-      config(
-        displayModeBar = TRUE,
-        modeBarButtonsToRemove = c("lasso2d", "select2d", "autoScale2d"),
-        displaylogo = FALSE
-      )
+    plot_ly(reservoir_data, x = ~date, y = ~temperature_c, type = 'scatter', mode = 'lines+markers') %>%
+      layout(title = "Surface Temperature",
+             xaxis = list(title = "Date"),
+             yaxis = list(title = "Temperature (°C)"))
   })
   
-  
-  # Enhanced SDD plot output with professional styling
+  # BASIC SDD plot output (WORKING):
   output$sdd_plot <- renderPlotly({
-    if (length(selected_reservoirs$rowids) == 0) {
-      # Enhanced empty state
-      p <- ggplot() + 
-        geom_text(
-          aes(x = 0.5, y = 0.5), 
-          label = "Select reservoirs on the map\nto view water clarity data", 
-          size = 5, 
-          color = "#7f8c8d",
-          fontface = "italic"
-        ) +
-        theme_void() +
-        xlim(0, 1) + ylim(0, 1) +
-        theme(
-          plot.background = element_rect(fill = "#f8f9fa", color = NA),
-          panel.background = element_rect(fill = "#f8f9fa", color = NA)
-        )
-      
-      return(ggplotly(p) %>%
-        layout(
-          showlegend = FALSE,
-          xaxis = list(showgrid = FALSE, showticklabels = FALSE),
-          yaxis = list(showgrid = FALSE, showticklabels = FALSE)
-        ))
+    req(selected_reservoir())
+    
+    reservoir_data <- sdd_data %>%
+      filter(rowid == selected_reservoir()$rowid) %>%
+      arrange(date)
+    
+    if(nrow(reservoir_data) == 0) {
+      return(plot_ly() %>% 
+               add_text(x = 0.5, y = 0.5, text = "No SDD data available", 
+                        textposition = "middle center") %>%
+               layout(showlegend = FALSE, 
+                      xaxis = list(showgrid = FALSE, showticklabels = FALSE),
+                      yaxis = list(showgrid = FALSE, showticklabels = FALSE)))
     }
     
-    plot_data <- selected_reservoirs$sdd_data
-    
-    if (nrow(plot_data) == 0) {
-      # No data available message
-      p <- ggplot() + 
-        geom_text(
-          aes(x = 0.5, y = 0.5), 
-          label = "No SDD data available\nfor selected reservoirs", 
-          size = 5, 
-          color = "#e74c3c"
-        ) +
-        theme_void() +
-        xlim(0, 1) + ylim(0, 1)
-      
-      return(ggplotly(p))
-    }
-    
-    # Get reservoir names for better labeling
-    points_data <- data_availability()
-    plot_data <- plot_data %>%
-      left_join(points_data %>% select(rowid, display_name), by = "rowid") %>%
-      mutate(
-        reservoir_label = paste0(display_name, " (", rowid, ")"),
-        # Convert to different depth units for context
-        sdd_feet = sdd_mean * 3.28084,
-        # Add clarity categories
-        clarity_category = case_when(
-          sdd_mean < 1 ~ "Poor",
-          sdd_mean < 2 ~ "Moderate", 
-          sdd_mean < 3 ~ "Good",
-          TRUE ~ "Excellent"
-        )
-      ) %>%
-      filter(!is.na(sdd_mean), sdd_mean > 0)
-    
-    # Determine if this is simulated or real data
-    data_type <- if (any(plot_data$sdd_quality == "Simulated")) "Simulated" else "Remote Sensing"
-    
-    # Create enhanced SDD plot
-    p <- ggplot(plot_data, aes(x = date, y = sdd_mean, color = reservoir_label)) +
-      geom_line(size = 1.2, alpha = 0.8) +
-      geom_point(
-        size = 2, 
-        alpha = 0.7,
-        aes(
-          shape = clarity_category,
-          text = paste0(
-            "Reservoir: ", display_name, "\n",
-            "Date: ", format(date, "%Y-%m-%d"), "\n",
-            "SDD: ", round(sdd_mean, 2), " m (", round(sdd_feet, 1), " ft)\n",
-            "Clarity: ", clarity_category, "\n",
-            "Data Quality: ", sdd_quality
-          )
-        )
-      ) +
-      scale_y_continuous(
-        name = "Secchi Disk Depth (meters)",
-        sec.axis = sec_axis(
-          trans = ~ . * 3.28084, 
-          name = "Secchi Disk Depth (feet)",
-          breaks = scales::pretty_breaks(n = 6)
-        ),
-        breaks = scales::pretty_breaks(n = 6),
-        limits = c(0, max(plot_data$sdd_mean, na.rm = TRUE) * 1.1)
-      ) +
-      scale_x_date(
-        name = "Date",
-        date_breaks = "2 months",
-        date_labels = "%b %Y"
-      ) +
-      scale_color_viridis_d(
-        name = "Reservoir",
-        option = "C",
-        begin = 0.1,
-        end = 0.9
-      ) +
-      scale_shape_manual(
-        name = "Water Clarity",
-        values = c("Poor" = 16, "Moderate" = 17, "Good" = 15, "Excellent" = 18)
-      ) +
-      labs(
-        title = "Secchi Disk Depth Time Series",
-        subtitle = paste0("Cache La Poudre Reservoirs (", length(unique(plot_data$rowid)), " selected) - ", data_type, " Data"),
-        caption = "Higher values indicate clearer water. SDD measures water transparency.",
-        x = "Date"
-      ) +
-      theme_minimal() +
-      theme(
-        plot.title = element_text(size = 16, face = "bold", color = "#2c3e50"),
-        plot.subtitle = element_text(size = 12, color = "#7f8c8d"),
-        plot.caption = element_text(size = 10, color = "#95a5a6", style = "italic"),
-        legend.position = "bottom",
-        legend.title = element_text(face = "bold"),
-        axis.title = element_text(face = "bold"),
-        axis.title.y.right = element_text(color = "#9b59b6"),
-        axis.text.y.right = element_text(color = "#9b59b6"),
-        panel.grid.minor = element_blank(),
-        panel.grid.major = element_line(alpha = 0.3),
-        plot.background = element_rect(fill = "#f8f9fa", color = NA),
-        panel.background = element_rect(fill = "white", color = NA)
-      )
-    
-    # Add reference lines for clarity categories
-    if (data_type == "Simulated") {
-      p <- p + 
-        geom_hline(yintercept = c(1, 2, 3), linetype = "dashed", alpha = 0.3, color = "#7f8c8d") +
-        annotate("text", x = min(plot_data$date), y = c(0.5, 1.5, 2.5, 3.5), 
-                label = c("Poor", "Moderate", "Good", "Excellent"), 
-                size = 3, alpha = 0.6, hjust = 0)
-    }
-    
-    # Convert to plotly with enhanced interactions
-    ggplotly(p, tooltip = "text", source = "sdd_plot") %>%
-      layout(
-        legend = list(
-          orientation = "h", 
-          x = 0, 
-          y = -0.15,
-          font = list(size = 10)
-        ),
-        margin = list(b = 80),
-        hovermode = "closest"
-      ) %>%
-      event_register("plotly_zoom") %>%
-      event_register("plotly_relayout") %>%
-      event_register("plotly_selected") %>%
-      config(
-        displayModeBar = TRUE,
-        modeBarButtonsToRemove = c("lasso2d", "select2d", "autoScale2d"),
-        displaylogo = FALSE
-      )
+    plot_ly(reservoir_data, x = ~date, y = ~sdd_m, type = 'scatter', mode = 'lines+markers') %>%
+      layout(title = "Secchi Disk Depth",
+             xaxis = list(title = "Date"),
+             yaxis = list(title = "Depth (m)"))
   })
+  
+  
+  # FANCY PLOT OUTPUTS (COMMENTED OUT - ADD BACK INCREMENTALLY):
+  # Enhanced temperature plot output with professional styling
+  # DISABLED FOR DEBUGGING - COMMENTING OUT ALL PLOT CODE
+  # output$temp_plot <- renderPlotly({
+  #   # ... plot code commented out
+  # })
+  
+  
+  # Enhanced SDD plot output with professional styling  
+  # DISABLED FOR DEBUGGING - COMMENTING OUT ALL PLOT CODE
+  # output$sdd_plot <- renderPlotly({
+  #   # ... plot code commented out
+  # })
   
   
   # Reactive values for plot synchronization
@@ -824,162 +407,166 @@ function(input, output, session) {
   )
   
   # Enhanced plot connectivity - Temperature plot zoom sync
-  observeEvent(event_data("plotly_relayout", source = "temp_plot"), {
-    if (!plot_zoom_state$sync_enabled) return()
-    
-    relayout_data <- event_data("plotly_relayout", source = "temp_plot")
-    
-    if (!is.null(relayout_data) && any(grepl("xaxis.range", names(relayout_data)))) {
-      # Extract x-axis range
-      if ("xaxis.range[0]" %in% names(relayout_data) && "xaxis.range[1]" %in% names(relayout_data)) {
-        x_range <- c(relayout_data[["xaxis.range[0]"]], relayout_data[["xaxis.range[1]"]])
-        
-        # Temporarily disable sync to prevent infinite loop
-        plot_zoom_state$sync_enabled <- FALSE
-        
-        # Apply same zoom to SDD plot
-        plotlyProxy("sdd_plot", session) %>%
-          plotlyProxyInvoke("relayout", list(
-            "xaxis.range" = x_range
-          ))
-        
-        # Re-enable sync after a short delay
-        invalidateLater(100)
-        observe({
-          plot_zoom_state$sync_enabled <- TRUE
-        })
-      }
-    }
-  })
+  # DISABLED: Complex plotly event handling causing warnings
+  # observeEvent(event_data("plotly_relayout", source = "temp_plot"), {
+  #   if (!plot_zoom_state$sync_enabled) return()
+  #   
+  #   relayout_data <- event_data("plotly_relayout", source = "temp_plot")
+  #   
+  #   if (!is.null(relayout_data) && any(grepl("xaxis.range", names(relayout_data)))) {
+  #     # Extract x-axis range
+  #     if ("xaxis.range[0]" %in% names(relayout_data) && "xaxis.range[1]" %in% names(relayout_data)) {
+  #       x_range <- c(relayout_data[["xaxis.range[0]"]], relayout_data[["xaxis.range[1]"]])
+  #       
+  #       # Temporarily disable sync to prevent infinite loop
+  #       plot_zoom_state$sync_enabled <- FALSE
+  #       
+  #       # Apply same zoom to SDD plot
+  #       plotlyProxy("sdd_plot", session) %>%
+  #         plotlyProxyInvoke("relayout", list(
+  #           "xaxis.range" = x_range
+  #         ))
+  #       
+  #       # Re-enable sync after a short delay
+  #       invalidateLater(100)
+  #       observe({
+  #         plot_zoom_state$sync_enabled <- TRUE
+  #       })
+  #     }
+  #   }
+  # })
   
-  # Enhanced plot connectivity - SDD plot zoom sync
-  observeEvent(event_data("plotly_relayout", source = "sdd_plot"), {
-    if (!plot_zoom_state$sync_enabled) return()
-    
-    relayout_data <- event_data("plotly_relayout", source = "sdd_plot")
-    
-    if (!is.null(relayout_data) && any(grepl("xaxis.range", names(relayout_data)))) {
-      # Extract x-axis range
-      if ("xaxis.range[0]" %in% names(relayout_data) && "xaxis.range[1]" %in% names(relayout_data)) {
-        x_range <- c(relayout_data[["xaxis.range[0]"]], relayout_data[["xaxis.range[1]"]])
-        
-        # Temporarily disable sync to prevent infinite loop
-        plot_zoom_state$sync_enabled <- FALSE
-        
-        # Apply same zoom to temperature plot
-        plotlyProxy("temp_plot", session) %>%
-          plotlyProxyInvoke("relayout", list(
-            "xaxis.range" = x_range
-          ))
-        
-        # Re-enable sync after a short delay
-        invalidateLater(100)
-        observe({
-          plot_zoom_state$sync_enabled <- TRUE
-        })
-      }
-    }
-  })
+  # Enhanced plot connectivity - SDD plot zoom sync  
+  # DISABLED: Complex plotly event handling causing warnings
+  # observeEvent(event_data("plotly_relayout", source = "sdd_plot"), {
+  #   if (!plot_zoom_state$sync_enabled) return()
+  #   
+  #   relayout_data <- event_data("plotly_relayout", source = "sdd_plot")
+  #   
+  #   if (!is.null(relayout_data) && any(grepl("xaxis.range", names(relayout_data)))) {
+  #     # Extract x-axis range
+  #     if ("xaxis.range[0]" %in% names(relayout_data) && "xaxis.range[1]" %in% names(relayout_data)) {
+  #       x_range <- c(relayout_data[["xaxis.range[0]"]], relayout_data[["xaxis.range[1]"]])
+  #       
+  #       # Temporarily disable sync to prevent infinite loop
+  #       plot_zoom_state$sync_enabled <- FALSE
+  #       
+  #       # Apply same zoom to temperature plot
+  #       plotlyProxy("temp_plot", session) %>%
+  #         plotlyProxyInvoke("relayout", list(
+  #           "xaxis.range" = x_range
+  #         ))
+  #       
+  #       # Re-enable sync after a short delay
+  #       invalidateLater(100)
+  #       observe({
+  #         plot_zoom_state$sync_enabled <- TRUE
+  #       })
+  #     }
+  #   }
+  # })
   
   # Plot selection to map highlighting (crossfilter functionality)
-  observeEvent(event_data("plotly_selected", source = "temp_plot"), {
-    selected_data <- event_data("plotly_selected", source = "temp_plot")
-    
-    if (!is.null(selected_data) && nrow(selected_data) > 0) {
-      # Get unique reservoir IDs from selected points
-      selected_curve_numbers <- unique(selected_data$curveNumber)
-      
-      # Get the corresponding rowids
-      temp_data <- selected_reservoirs$temp_data
-      unique_reservoirs <- temp_data %>%
-        distinct(rowid) %>%
-        mutate(curve_number = row_number() - 1)
-      
-      highlighted_rowids <- unique_reservoirs$rowid[unique_reservoirs$curve_number %in% selected_curve_numbers]
-      
-      # Highlight corresponding reservoirs on map
-      req(clp_sf())
-      sf_wgs84 <- st_transform(clp_sf(), 4326)
-      
-      leafletProxy("map") %>%
-        clearMarkers() %>%
-        addAwesomeMarkers(
-          data = sf_wgs84,
-          layerId = ~rowid,
-          popup = ~create_enhanced_popup(rowid, display_name, area_sq_km, size_category, has_temp_data, has_sdd_data),
-          icon = ~awesomeIcons(
-            icon = 'tint',
-            markerColor = case_when(
-              rowid %in% highlighted_rowids ~ 'orange',
-              rowid %in% selected_reservoirs$rowids ~ 'red',
-              TRUE ~ 'blue'
-            ),
-            iconColor = 'white',
-            library = 'fa'
-          ),
-          clusterOptions = markerClusterOptions(
-            showCoverageOnHover = FALSE,
-            zoomToBoundsOnClick = TRUE,
-            spiderfyOnMaxZoom = TRUE,
-            removeOutsideVisibleBounds = TRUE,
-            maxClusterRadius = 50
-          )
-        )
-      
-      showNotification(paste("Highlighted", length(highlighted_rowids), "reservoirs on map"), 
-                      type = "message", duration = 2)
-    }
-  })
+  # DISABLED: Complex plotly event handling causing warnings
+  # observeEvent(event_data("plotly_selected", source = "temp_plot"), {
+  #   selected_data <- event_data("plotly_selected", source = "temp_plot")
+  #   
+  #   if (!is.null(selected_data) && nrow(selected_data) > 0) {
+  #     # Get unique reservoir IDs from selected points
+  #     selected_curve_numbers <- unique(selected_data$curveNumber)
+  #     
+  #     # Get the corresponding rowids
+  #     temp_data <- selected_reservoirs$temp_data
+  #     unique_reservoirs <- temp_data %>%
+  #       distinct(rowid) %>%
+  #       mutate(curve_number = row_number() - 1)
+  #     
+  #     highlighted_rowids <- unique_reservoirs$rowid[unique_reservoirs$curve_number %in% selected_curve_numbers]
+  #     
+  #     # Highlight corresponding reservoirs on map
+  #     req(clp_sf())
+  #     sf_wgs84 <- st_transform(clp_sf(), 4326)
+  #     
+  #     leafletProxy("map") %>%
+  #       clearMarkers() %>%
+  #       addAwesomeMarkers(
+  #         data = sf_wgs84,
+  #         layerId = ~rowid,
+  #         popup = ~create_enhanced_popup(rowid, display_name, area_sq_km, size_category, has_temp_data, has_sdd_data),
+  #         icon = ~awesomeIcons(
+  #           icon = 'tint',
+  #           markerColor = case_when(
+  #             rowid %in% highlighted_rowids ~ 'orange',
+  #             rowid %in% selected_reservoirs$rowids ~ 'red',
+  #             TRUE ~ 'blue'
+  #           ),
+  #           iconColor = 'white',
+  #           library = 'fa'
+  #         ),
+  #         clusterOptions = markerClusterOptions(
+  #           showCoverageOnHover = FALSE,
+  #           zoomToBoundsOnClick = TRUE,
+  #           spiderfyOnMaxZoom = TRUE,
+  #           removeOutsideVisibleBounds = TRUE,
+  #           maxClusterRadius = 50
+  #         )
+  #       )
+  #     
+  #     showNotification(paste("Highlighted", length(highlighted_rowids), "reservoirs on map"), 
+  #                     type = "message", duration = 2)
+  #   }
+  # })
   
   # SDD plot selection to map highlighting
-  observeEvent(event_data("plotly_selected", source = "sdd_plot"), {
-    selected_data <- event_data("plotly_selected", source = "sdd_plot")
-    
-    if (!is.null(selected_data) && nrow(selected_data) > 0) {
-      # Get unique reservoir IDs from selected points
-      selected_curve_numbers <- unique(selected_data$curveNumber)
-      
-      # Get the corresponding rowids
-      sdd_data <- selected_reservoirs$sdd_data
-      unique_reservoirs <- sdd_data %>%
-        distinct(rowid) %>%
-        mutate(curve_number = row_number() - 1)
-      
-      highlighted_rowids <- unique_reservoirs$rowid[unique_reservoirs$curve_number %in% selected_curve_numbers]
-      
-      # Highlight corresponding reservoirs on map
-      req(clp_sf())
-      sf_wgs84 <- st_transform(clp_sf(), 4326)
-      
-      leafletProxy("map") %>%
-        clearMarkers() %>%
-        addAwesomeMarkers(
-          data = sf_wgs84,
-          layerId = ~rowid,
-          popup = ~create_enhanced_popup(rowid, display_name, area_sq_km, size_category, has_temp_data, has_sdd_data),
-          icon = ~awesomeIcons(
-            icon = 'tint',
-            markerColor = case_when(
-              rowid %in% highlighted_rowids ~ 'orange',
-              rowid %in% selected_reservoirs$rowids ~ 'red',
-              TRUE ~ 'blue'
-            ),
-            iconColor = 'white',
-            library = 'fa'
-          ),
-          clusterOptions = markerClusterOptions(
-            showCoverageOnHover = FALSE,
-            zoomToBoundsOnClick = TRUE,
-            spiderfyOnMaxZoom = TRUE,
-            removeOutsideVisibleBounds = TRUE,
-            maxClusterRadius = 50
-          )
-        )
-      
-      showNotification(paste("Highlighted", length(highlighted_rowids), "reservoirs on map"), 
-                      type = "message", duration = 2)
-    }
-  })
+  # DISABLED: Complex plotly event handling causing warnings
+  # observeEvent(event_data("plotly_selected", source = "sdd_plot"), {
+  #   selected_data <- event_data("plotly_selected", source = "sdd_plot")
+  #   
+  #   if (!is.null(selected_data) && nrow(selected_data) > 0) {
+  #     # Get unique reservoir IDs from selected points
+  #     selected_curve_numbers <- unique(selected_data$curveNumber)
+  #     
+  #     # Get the corresponding rowids
+  #     sdd_data <- selected_reservoirs$sdd_data
+  #     unique_reservoirs <- sdd_data %>%
+  #       distinct(rowid) %>%
+  #       mutate(curve_number = row_number() - 1)
+  #     
+  #     highlighted_rowids <- unique_reservoirs$rowid[unique_reservoirs$curve_number %in% selected_curve_numbers]
+  #     
+  #     # Highlight corresponding reservoirs on map
+  #     req(clp_sf())
+  #     sf_wgs84 <- st_transform(clp_sf(), 4326)
+  #     
+  #     leafletProxy("map") %>%
+  #       clearMarkers() %>%
+  #       addAwesomeMarkers(
+  #         data = sf_wgs84,
+  #         layerId = ~rowid,
+  #         popup = ~create_enhanced_popup(rowid, display_name, area_sq_km, size_category, has_temp_data, has_sdd_data),
+  #         icon = ~awesomeIcons(
+  #           icon = 'tint',
+  #           markerColor = case_when(
+  #             rowid %in% highlighted_rowids ~ 'orange',
+  #             rowid %in% selected_reservoirs$rowids ~ 'red',
+  #             TRUE ~ 'blue'
+  #           ),
+  #           iconColor = 'white',
+  #           library = 'fa'
+  #         ),
+  #         clusterOptions = markerClusterOptions(
+  #           showCoverageOnHover = FALSE,
+  #           zoomToBoundsOnClick = TRUE,
+  #           spiderfyOnMaxZoom = True,
+  #           removeOutsideVisibleBounds = TRUE,
+  #           maxClusterRadius = 50
+  #         )
+  #       )
+  #     
+  #     showNotification(paste("Highlighted", length(highlighted_rowids), "reservoirs on map"), 
+  #                     type = "message", duration = 2)
+  #   }
+  # })
   
   # Output for selection info display
   output$selection_info <- renderText({
