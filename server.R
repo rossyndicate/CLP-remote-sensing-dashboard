@@ -19,10 +19,7 @@ function(input, output, session) {
             area_sq_km < 0.1 ~ "Small",
             area_sq_km < 0.5 ~ "Medium", 
             TRUE ~ "Large"
-          ),
-          # Add data availability status
-          has_temp_data = rowid %in% unique(clp_temp()$rowid),
-          has_sdd_data = rowid %in% unique(clp_sdd()$rowid)
+          )
         )
       
       data
@@ -30,6 +27,23 @@ function(input, output, session) {
       showNotification("Error loading reservoir data", type = "error")
       data.frame()
     })
+  })
+  
+  # Enhanced reactive for data availability checking
+  data_availability <- reactive({
+    points <- nw_clp_points()
+    temp_data <- clp_temp()
+    sdd_data <- clp_sdd()
+    
+    if (nrow(points) > 0) {
+      points %>%
+        mutate(
+          has_temp_data = rowid %in% unique(temp_data$rowid),
+          has_sdd_data = rowid %in% unique(sdd_data$rowid)
+        )
+    } else {
+      points
+    }
   })
   
   clp_temp <- reactive({
@@ -108,9 +122,9 @@ function(input, output, session) {
   
   # Convert points to sf object with Colorado State Plane projection
   clp_sf <- reactive({
-    req(nrow(nw_clp_points()) > 0)
+    req(nrow(data_availability()) > 0)
     
-    points <- nw_clp_points()
+    points <- data_availability()
     
     tryCatch({
       # Create sf object from lat/long (WGS84)
@@ -193,7 +207,7 @@ function(input, output, session) {
     info_text <- if (count == 0) {
       "Click on reservoirs to view their data"
     } else if (count == 1) {
-      points <- nw_clp_points()
+      points <- data_availability()
       selected_point <- points[points$rowid == selected_reservoirs$rowids[1], ]
       paste0("Selected: ", selected_point$display_name)
     } else {
@@ -553,7 +567,7 @@ function(input, output, session) {
     }
     
     # Get reservoir names for better labeling
-    points_data <- nw_clp_points()
+    points_data <- data_availability()
     plot_data <- plot_data %>%
       left_join(points_data %>% select(rowid, display_name), by = "rowid") %>%
       mutate(
@@ -686,7 +700,7 @@ function(input, output, session) {
     }
     
     # Get reservoir names for better labeling
-    points_data <- nw_clp_points()
+    points_data <- data_availability()
     plot_data <- plot_data %>%
       left_join(points_data %>% select(rowid, display_name), by = "rowid") %>%
       mutate(
@@ -974,7 +988,7 @@ function(input, output, session) {
     if (count == 0) {
       "Click on reservoirs to view their data"
     } else if (count == 1) {
-      points <- nw_clp_points()
+      points <- data_availability()
       selected_point <- points[points$rowid == selected_reservoirs$rowids[1], ]
       paste0("Selected: ", selected_point$display_name)
     } else {

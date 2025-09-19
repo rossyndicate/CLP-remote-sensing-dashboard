@@ -35,8 +35,7 @@ suppressMessages({
   library(shinyWidgets) # for enhanced widgets
   library(shinydashboard)
   library(htmltools)
-  library(fontawesome) # for icons
-  library(fresh) # for custom themes
+  library(htmlwidgets) # for custom JavaScript
   library(readr)
   # Core data manipulation
   library(tidyverse)
