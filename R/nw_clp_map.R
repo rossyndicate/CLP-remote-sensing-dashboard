@@ -4,7 +4,7 @@ nw_clp_map <- function(point_df, point_list) {
     addCircleMarkers(
       data = points,
       ~lng, ~lat,
-      popup = ~paste("Reservoir:", perm),
+      popup = ~paste("Waterbody:", perm),
       layerId = ~perm,
       color = '#808080',
       fillColor = '#808080',
