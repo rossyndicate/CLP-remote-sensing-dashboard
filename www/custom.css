@@ -1,0 +1,128 @@
+/* CLP Remote Sensing Dashboard Custom Styles */
+
+/* Body and page styling */
+body {
+  background-color: #f8f9fa;
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+}
+
+/* Header styling */
+.dashboard-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 20px;
+  margin-bottom: 20px;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+
+.dashboard-title {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+/* Reset button styling */
+.reset-button {
+  background: linear-gradient(45deg, #ff6b6b, #ee5a52);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-weight: 600;
+  padding: 10px 20px;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(255,107,107,0.3);
+  float: right;
+  margin-top: 5px;
+}
+
+.reset-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(255,107,107,0.4);
+  background: linear-gradient(45deg, #ee5a52, #dc4444);
+}
+
+/* Card styling for main content */
+.content-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  border: 1px solid #e9ecef;
+  padding: 20px;
+  margin-bottom: 20px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.content-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+}
+
+/* Map styling */
+.map-container {
+  position: relative;
+}
+
+.leaflet-container {
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid #e9ecef;
+}
+
+/* Plot section styling */
+.plot-section {
+  background: white;
+}
+
+.plot-title {
+  color: #2c3e50;
+  font-weight: 600;
+  margin-bottom: 15px;
+  font-size: 1.2rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.plot-title i {
+  color: #3498db;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .dashboard-title {
+    font-size: 1.5rem;
+  }
+  
+  .reset-button {
+    float: none;
+    width: 100%;
+    margin-top: 10px;
+  }
+  
+  .content-card {
+    padding: 15px;
+  }
+}
+
+/* Loading states */
+.loading-spinner {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 200px;
+  color: #6c757d;
+}
+
+/* Notification improvements */
+.shiny-notification {
+  border-radius: 8px;
+  border: none;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.shiny-notification-message {
+  background: linear-gradient(45deg, #28a745, #20c997);
+  color: white;
+}
