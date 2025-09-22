@@ -1,4 +1,4 @@
-update_nw_clp_map <- function(point_df, point_list) {
+update_nw_clp_map <- function(point_df, point_list, lat, lng) {
   leafletProxy("map") %>%
     clearMarkers() %>%
     addCircleMarkers(
@@ -11,5 +11,6 @@ update_nw_clp_map <- function(point_df, point_list) {
       fillOpacity = 0.7,
       radius = 8,
       weight = 2
-    )
+    ) %>%
+    flyTo(lng = lng, lat = lat, zoom = 12)
 }

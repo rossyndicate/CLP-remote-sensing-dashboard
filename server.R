@@ -15,10 +15,9 @@ function(input, output, session) {
     temp_plot_data(temp_plot_df)
     
     # Reset Map
-    update_nw_clp_map(
-      point_df = points,
-      point_list = selected_ids()
-    )
+    output$map <- renderLeaflet ({ 
+      nw_clp_map(point_df = points)
+    })
     
     # Optional: Show a brief confirmation message
     showNotification("Selections reset!", type = "message", duration = 2)
@@ -33,6 +32,8 @@ function(input, output, session) {
   observeEvent(input$map_marker_click, {
     
     point_id <- input$map_marker_click$id
+    clicked_lat <- input$map_marker_click$lat
+    clicked_lng <- input$map_marker_click$lng
     
     updated_ids <- point_click(
       point_list = selected_ids(),
@@ -50,7 +51,9 @@ function(input, output, session) {
     
     update_nw_clp_map(
       point_df = points,
-      point_list = selected_ids()
+      point_list = selected_ids(),
+      lat = clicked_lat,
+      lng = clicked_lng
     )
   })  
   
