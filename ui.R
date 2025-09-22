@@ -5,7 +5,7 @@ fluidPage(
   # Header row with styling
   fluidRow(
     class = "dashboard-header",
-    column(6, h1("CLP Remote Sensing Dashboard", class = "dashboard-title")),
+    column(6, h1("Cache La Poudre Remote Sensing Dashboard", class = "dashboard-title")),
     column(6, 
            actionButton("reset_btn", "Reset Selections", class = "reset-button"))
   ),
