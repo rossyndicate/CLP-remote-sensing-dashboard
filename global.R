@@ -1,67 +1,87 @@
 #### Global Variables ####
-
-# Enhanced CLP Remote Sensing Dashboard
-# Enhanced package loading for better performance and styling
-
-# Simply load required packages - shinyapps.io will automatically detect and install them
 suppressMessages({
-  # Date/time handling
-  library(zoo)
-  library(padr)
   # Data cleaning and utilities
   library(janitor)
-  library(broom)
   library(here)
-  library(rlist)
   # Spatial packages
   library(sf)
   library(leaflet)
-  library(leaflet.extras) # for additional leaflet functionality
-  library(tigris) # for colorado boundary
+  library(leaflet.extras) 
   # Enhanced visualization
-  library(ggpubr)
-  library(ggthemes)
-  library(scales)
   library(plotly)
-  library(ggpmisc)
-  library(viridis) # for better color palettes
-  library(RColorBrewer)
-  # Development tools
-  library(devtools)
-  # Enhanced Shiny components - MINIMAL LOADING FOR DEBUGGING
+  library(viridis) 
+  # Enhanced Shiny components 
   library(shiny)
-  library(shinycssloaders) 
-  library(shinyTime) 
-  library(bslib) 
-  library(shinyWidgets)
-  library(shinydashboard) 
   library(htmltools) 
-  library(htmlwidgets) 
-  library(shinyjs)
-  library(readr)
   # Core data manipulation
   library(tidyverse)
-  library(DT)
-  library(purrr)
-  library(data.table)
+  # Data loading
   library(arrow)
 })
 
 #### Enhanced Setup ####
-
 options(shiny.maxRequestSize = 10000 * 1024^2)
 
+## Sourcing the functions
+source(here("R", "nw_clp_map.R"))
+source(here("R", "plot_temp.R"))
+source(here("R", "plot_sdd.R"))
+source(here("R", "update_ids.R"))
+source(here("R", "update_nw_clp_map.R"))
+source(here("R", "update_temp_data.R"))
+source(here("R", "update_sdd_data.R"))
+
 # Set up file paths for data
-points_path <- here("data", "points.shp")
+points_path <- here("data", "points.parquet")
 temp_ts_path <- here("data", "temp_ts.parquet") 
-# sdd_ts_path <- here("data", "clp_sdd_rs_estimate_v2024-10-10.feather")
+sdd_ts_path <- here("data", "sdd_ts_mean.parquet")
 id_color_lookup_path <- here("data", "id_color_lookup.parquet")
+temp_lookup_path <- here("data", "temp_lookup.parquet")
+sdd_lookup_path <- here("data", "sdd_lookup.parquet")
+temp_plot_df_path <- here("data", "temp_plot_df.parquet")
+sdd_plot_df_path <- here("data", "sdd_plot_df.parquet")
 
-# Load the point data sf - DIRECT LOADING
-points <- st_read(points_path, quiet = TRUE)
+# Load the point data and convert it to sf
+points <- arrow::read_parquet(points_path, quiet = TRUE) %>% 
+  st_as_sf(coords = (c("lng", "lat")),
+           crs = 4326,
+           remove = FALSE)
 
-temp_ts <- load_temp_data(temp_ts_path)
-temp_plot_df <- temp_ts %>% select(date)
-# sdd_ts <- load_sdd_data(sdd_ts_path)
+# Load the time series data
+# Temperature
+temp_ts <- arrow::read_parquet(temp_ts_path, quiet = TRUE)
+# SDD
+sdd_ts_mean <- arrow::read_parquet(sdd_ts_path, quiet = TRUE)
 
-id_color_lookup <- read_parquet(id_color_lookup_path)
+# Load the color lookup table
+id_color_lookup <- arrow::read_parquet(id_color_lookup_path, quiet = TRUE)
+
+# Load the look up tables
+temp_lookup <- arrow::read_parquet(temp_lookup_path, quiet = TRUE)
+sdd_lookup <- arrow::read_parquet(sdd_lookup_path, quiet = TRUE)
+
+# Load the binding tables
+temp_plot_df <- arrow::read_parquet(temp_plot_df_path, quiet = TRUE)
+sdd_plot_df <- arrow::read_parquet(sdd_plot_df_path, quiet = TRUE) 
+
+# This is to make the shapes on the plotly plots
+# Get all unique missions from both datasets
+all_missions <- unique(c(temp_plot_df$mission, sdd_plot_df$mission))
+n_missions <- length(all_missions)
+
+plotly_shapes <- c("circle", "square", "diamond", "cross", "x")
+
+# Create mission-shape lookup for all missions
+mission_shape_lookup <- tibble(
+  mission = all_missions,
+  shape = rep(plotly_shapes, length.out = n_missions)
+)
+
+# Convert mission columns to factors with consistent levels
+temp_plot_df <- temp_plot_df %>%
+  mutate(mission = factor(mission, levels = all_missions)) %>% 
+  left_join(mission_shape_lookup, by = "mission")
+
+sdd_plot_df <- sdd_plot_df %>%
+  mutate(mission = factor(mission, levels = all_missions)) %>% 
+  left_join(mission_shape_lookup, by = "mission")

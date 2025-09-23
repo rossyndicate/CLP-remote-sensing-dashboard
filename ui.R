@@ -15,11 +15,17 @@ fluidPage(
     column(6, 
            div(class = "content-card",
                div(class = "map-container",
-                   leafletOutput("map", height = "400px")))),
-    column(6,
-           div(class = "content-card plot-section",
-               h3("Selected Point", class = "plot-title",
-                  tags$i(class = "fas fa-thermometer-half")),
-               plotlyOutput("temperature_plot"))) 
+                   leafletOutput("map", height = "600px")))),
+    column(6, class = "scrollable-plots-column",  # Add class here
+           div(class = "content-card dashboard-plots",
+               div(class = "plot-section",
+                   h3("Temperature", class = "plot-title",
+                      tags$i(class = "fas fa-thermometer-half")),
+                   plotlyOutput("temperature_plot"))),
+           div(class = "content-card dashboard-plots",
+               div(class = "plot-section",
+                   h3("SDD", class = "plot-title",
+                      tags$i(class = "fas fa-thermometer-half")),
+                   plotlyOutput("sdd_plot"))))
   )
 )
