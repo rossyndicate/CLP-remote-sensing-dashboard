@@ -102,9 +102,16 @@ body {
   color: #002EA3;
 }
 
+.scrollable-plots-column {
+  height: 650px;  /* Match the map height */
+  overflow-y: auto;  /* Enable vertical scrolling */
+  padding-right: 10px;  /* Account for scrollbar */
+}
+
 .dashboard-plots {
   display: flex;
   flex-direction: column;
+  min-height: 400px;  /* Let plots be their natural size */
 }
 
 .plot-section .plotly {
