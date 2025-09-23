@@ -1,15 +1,19 @@
 /* CLP Remote Sensing Dashboard Custom Styles */
 
+/* Import Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&family=Roboto:wght@300;400;500;600&display=swap');
+
 /* Body and page styling */
 body {
-  background-color: #f8f9fa;
-  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  background-color: #FFFFFF;
+  font-family: 'Roboto', sans-serif;
+  color: #000000;
 }
 
 /* Header styling */
 .dashboard-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background-color: #002EA3;
+  color: #FFFFFF;
   padding: 20px;
   margin-bottom: 20px;
   border-radius: 12px;
@@ -18,34 +22,38 @@ body {
 
 .dashboard-title {
   margin: 0;
+  font-family: 'Montserrat', sans-serif;
   font-size: 2rem;
   font-weight: 700;
   letter-spacing: -0.5px;
+  text-transform: uppercase;
+  color: #FFFFFF;
 }
 
 /* Reset button styling */
 .reset-button {
-  background: linear-gradient(45deg, #ff6b6b, #ee5a52);
+  background-color: #E70870;
   border: none;
   border-radius: 8px;
-  color: white;
+  color: #FFFFFF;
+  font-family: 'Roboto', sans-serif;
   font-weight: 600;
   padding: 10px 20px;
   transition: all 0.3s ease;
-  box-shadow: 0 2px 8px rgba(255,107,107,0.3);
+  box-shadow: 0 2px 8px rgba(231,8,112,0.3);
   float: right;
   margin-top: 5px;
 }
 
 .reset-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(255,107,107,0.4);
-  background: linear-gradient(45deg, #ee5a52, #dc4444);
+  box-shadow: 0 4px 15px rgba(231,8,112,0.4);
+  background-color: #C3056A;
 }
 
 /* Card styling for main content */
 .content-card {
-  background: white;
+  background: #FFFFFF;
   border-radius: 12px;
   box-shadow: 0 2px 12px rgba(0,0,0,0.08);
   border: 1px solid #e9ecef;
@@ -67,26 +75,40 @@ body {
 .leaflet-container {
   border-radius: 8px;
   overflow: hidden;
-  border: 2px solid #e9ecef;
+  border: 2px solid #002EA3;
 }
 
 /* Plot section styling */
 .plot-section {
-  background: white;
+  background: #FFFFFF;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .plot-title {
-  color: #2c3e50;
+  color: #000000;
+  font-family: 'Montserrat', sans-serif;
   font-weight: 600;
   margin-bottom: 15px;
   font-size: 1.2rem;
+  text-transform: uppercase;
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
 .plot-title i {
-  color: #3498db;
+  color: #002EA3;
+}
+
+.dashboard-plots {
+  display: flex;
+  flex-direction: column;
+}
+
+.plot-section .plotly {
+  flex-grow: 1;
 }
 
 /* Responsive adjustments */
@@ -112,7 +134,7 @@ body {
   justify-content: center;
   align-items: center;
   height: 200px;
-  color: #6c757d;
+  color: #000000;
 }
 
 /* Notification improvements */
@@ -123,6 +145,6 @@ body {
 }
 
 .shiny-notification-message {
-  background: linear-gradient(45deg, #28a745, #20c997);
-  color: white;
+  background-color: #C3F73A;
+  color: #000000;
 }

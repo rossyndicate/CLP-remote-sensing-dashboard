@@ -1,15 +1,15 @@
-plot_temp <- function(plot_df) {
+plot_sdd <- function(plot_df) {
   
   has_data <- ncol(plot_df) > 3
   
   if (has_data) {
     p <- plot_df %>%
-      pivot_longer(cols = -c(date, mission, shape), names_to = "perm", values_to = "temperature") %>% 
-      left_join(temp_lookup, by = "perm") %>% 
-      plot_ly(x = ~date, y = ~temperature, 
+      pivot_longer(cols = -c(date, mission, shape), names_to = "perm", values_to = "sdd") %>% 
+      left_join(sdd_lookup, by = "perm") %>% 
+      plot_ly(x = ~date, y = ~sdd, 
               color = ~ifelse(is.na(gnis_name), perm, gnis_name), 
               colors = ~color,
-              symbol = ~mission,  
+              symbol = ~mission,
               type = 'scatter', mode = 'markers',
               hovertemplate = paste(
                 "<b>Perm:</b> %{customdata}<br>",
@@ -21,7 +21,7 @@ plot_temp <- function(plot_df) {
       layout(
         showlegend = TRUE,
         xaxis = list(title = "Date"),
-        yaxis = list(title = "Temperature (°C)"),
+        yaxis = list(title = "SDD (m)"),
         legend = list(
           orientation = "h",  # Horizontal orientation
           x = 0.5,           # Center horizontally
