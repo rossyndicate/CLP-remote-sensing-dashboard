@@ -1,3 +1,16 @@
+#' @title Update Colorado Waterbody Leaflet Display
+#'
+#' @description 
+#' Updates the leaflet map by clearing existing markers and adding new circle markers
+#' with updated styling based on point selection status. Selected points are displayed
+#' with their assigned colors while unselected points appear in gray. The map view
+#' is also updated to fly to the specified coordinates.
+#'
+#' @param point_list A character vector containing IDs of currently selected points
+#' @param lat Numeric value for the latitude to center the map view on
+#' @param lng Numeric value for the longitude to center the map view on
+#'
+#' @return A leafletProxy object with updated markers and map view
 update_nw_clp_map <- function(point_list, lat, lng) {
   leafletProxy("map") %>%
     clearMarkers() %>%

@@ -1,12 +1,15 @@
-#' I want this to interact with `selected_points <- reactiveValues()` which
-#' will in turn interact with `output$selected_point_info <- renderText` (which
-#' will become a renderPlot). This function will interact with both of these with
-#' observeEvent as a middle man. The process looks like:
-#' make `selected_points` -> `observeEvent(map click)` -> update plots via `output$selected_point_info <- renderText`
-#' 
-#' Add points if they are not in the list, and remove points if they are in the list.
-#' Points can be added or removed with this function or the plotting function
-
+#' @title Update Point Selection List
+#'
+#' @description 
+#' Toggles the presence of a point ID in a selection list. If the ID is already 
+#' in the list, it removes it; if not present, it adds it. This function is used
+#' to manage interactive point selection in the Shiny application, allowing users
+#' to select/deselect waterbodies by clicking on map markers or plot elements.
+#'
+#' @param point_list A character vector containing currently selected point IDs
+#' @param id A character string representing the point ID to toggle
+#'
+#' @return A character vector with the updated point selection list
 update_ids <- function(point_list, id) {
   
   if (id %in% point_list) {

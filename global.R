@@ -1,4 +1,3 @@
-# TODO: documentation tomorrow
 #### Global Variables ####
 suppressMessages({
   # Data cleaning and utilities

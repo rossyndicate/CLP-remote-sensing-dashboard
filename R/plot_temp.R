@@ -1,3 +1,16 @@
+#' @title Create Temperature Interactive Plot
+#'
+#' @description
+#' Generates an interactive plotly scatter plot for water temperature data over time.
+#' If no data is available, displays a message prompting user to select points on the map.
+#' The plot includes color-coding by waterbody and different symbols for different missions.
+#'
+#' @param plot_df A data frame containing temperature data with columns:
+#'   date (observation date), mission (satellite mission), shape (marker shape),
+#'   and additional columns for each selected waterbody containing temperature values
+#'
+#' @return A plotly object containing either an interactive temperature time series plot 
+#'   or an empty plot with selection instructions
 plot_temp <- function(plot_df) {
   
   has_data <- ncol(plot_df) > 3
